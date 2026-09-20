@@ -1,89 +1,112 @@
 /*
- * EVEChat PWA shell v4 — mirror SullyOS' real strategy.
- * No fake top bar, no bridge layer, no dim overlay.
- * The iOS status-bar canvas reads the SAME root background as EVE.
+ * EVEChat iOS Standalone shell — adapted from SullyOS' actual layout strategy.
+ * Key points:
+ * 1) body is NOT fixed; the app shell (#phone-screen) is fixed.
+ * 2) root/app height is a stable JS variable, not 100vh during keyboard resize.
+ * 3) the real wallpaper/app layers begin at y=0, behind the iOS status bar.
  */
 
 :root {
     --eve-app-height: 100lvh;
+    --eve-visual-viewport-height: 100lvh;
+    --eve-keyboard-inset: 0px;
     --eve-safe-top: env(safe-area-inset-top, 0px);
-    --eve-safe-right: env(safe-area-inset-right, 0px);
     --eve-safe-bottom: env(safe-area-inset-bottom, 0px);
     --eve-safe-left: env(safe-area-inset-left, 0px);
-    --eve-keyboard-inset: 0px;
+    --eve-safe-right: env(safe-area-inset-right, 0px);
 }
 
-html.eve-standalone,
-html.eve-standalone body {
+html.eve-ios-standalone,
+html.eve-ios-standalone body {
     width: 100% !important;
     min-width: 100% !important;
-    height: var(--eve-app-height) !important;
-    min-height: var(--eve-app-height) !important;
-    max-height: var(--eve-app-height) !important;
+    height: var(--eve-app-height, 100lvh) !important;
+    min-height: var(--eve-app-height, 100lvh) !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: hidden !important;
-    overscroll-behavior: none !important;
-    background-position: center !important;
-    background-size: cover !important;
-    background-repeat: no-repeat !important;
+    box-sizing: border-box !important;
 }
 
-html.eve-standalone body {
-    position: static !important;
+html.eve-ios-standalone {
+    background-color: #d4e8f5;
+    overscroll-behavior: none !important;
+}
+
+/* SullyOS does not fix body on iOS standalone. The outer app shell is fixed instead. */
+html.eve-ios-standalone body,
+html.eve-ios-standalone body.fullscreen-mode {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
     inset: auto !important;
+    width: 100vw !important;
+    height: var(--eve-app-height, 100lvh) !important;
+    min-height: var(--eve-app-height, 100lvh) !important;
+    max-height: none !important;
     display: block !important;
     transform: none !important;
-    align-items: initial !important;
-    justify-content: initial !important;
-}
-
-/* Neutralize EVE's old full-screen black fallback. The real root background is
-   written inline by pwa-shell.js with !important, exactly like SullyOS mirrors
-   its wallpaper onto html/body. */
-html.eve-standalone body.fullscreen-mode {
+    margin: 0 !important;
     padding: 0 !important;
     overflow: hidden !important;
+    overscroll-behavior-x: none !important;
+    overscroll-behavior-y: auto !important;
+    align-items: initial !important;
+    justify-content: initial !important;
+    box-sizing: border-box !important;
 }
 
-html.eve-standalone #phone-screen,
-html.eve-standalone #phone-screen.fullscreen-mode {
+/* This becomes EVE's real full-screen app shell, matching SullyOS fixed inset-0. */
+html.eve-ios-standalone #phone-screen,
+html.eve-ios-standalone #phone-screen.fullscreen-mode {
     position: fixed !important;
-    inset: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
+    left: 0 !important;
+    inset: 0 0 auto 0 !important;
     width: 100vw !important;
     min-width: 100vw !important;
     max-width: 100vw !important;
-    height: var(--eve-app-height) !important;
-    min-height: var(--eve-app-height) !important;
-    max-height: var(--eve-app-height) !important;
+    height: var(--eve-app-height, 100lvh) !important;
+    min-height: var(--eve-app-height, 100lvh) !important;
+    max-height: var(--eve-app-height, 100lvh) !important;
     margin: 0 !important;
     padding: 0 !important;
     border: 0 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
-    transform: none !important;
+    transform: translateZ(0) !important;
     overflow: hidden !important;
+    flex-shrink: 0 !important;
     box-sizing: border-box !important;
-    background-color: transparent !important;
 }
 
-/* The wallpaper itself uses the exact same canvas geometry as the root, so
-   background-size:cover/background-position:center line up with no seam. */
-html.eve-standalone #wallpaper-element,
-html.eve-standalone .wallpaper#wallpaper-element {
+/* The real wallpaper itself starts at physical page y=0. */
+html.eve-ios-standalone #wallpaper-element,
+html.eve-ios-standalone .wallpaper#wallpaper-element {
     position: absolute !important;
     inset: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
     width: 100% !important;
     height: 100% !important;
     min-height: 100% !important;
     max-height: none !important;
     margin: 0 !important;
     transform: none !important;
+    background-size: cover !important;
+    background-position: center !important;
     box-sizing: border-box !important;
 }
 
-html.eve-standalone #phone-screen > .app-screen,
-html.eve-standalone .app-screen {
+/* EVE apps paint from the same y=0 canvas, rather than beginning below a fake status-bar strip. */
+html.eve-ios-standalone .app-screen {
+    position: absolute !important;
     top: 0 !important;
     right: 0 !important;
     bottom: 0 !important;
@@ -95,34 +118,55 @@ html.eve-standalone .app-screen {
     box-sizing: border-box !important;
 }
 
-/* Use the real iOS status bar in installed mode. Background stays full-bleed;
-   only interactive/header content gets safe-area spacing. */
-html.eve-standalone #status-bar,
-html.eve-standalone .app-status-bar {
+/* iOS already renders the real clock/signal/battery in standalone mode. */
+html.eve-ios-standalone #status-bar,
+html.eve-ios-standalone .app-status-bar {
     display: none !important;
 }
 
-html.eve-standalone .app-top-container {
-    padding-top: var(--eve-safe-top) !important;
+/* Only CONTENT clears the system status bar. The app/page background remains behind it. */
+html.eve-ios-standalone .app-top-container {
+    padding-top: var(--eve-safe-top, env(safe-area-inset-top, 0px)) !important;
     box-sizing: border-box !important;
 }
 
-html.eve-standalone .app-screen > .app-header:first-child,
-html.eve-standalone .app-screen > .header:first-child {
-    padding-top: calc(var(--eve-safe-top) + 6px) !important;
+/* Keep bottom fixed bars above the home indicator without creating a separate colored strip. */
+html.eve-ios-standalone #dock-bar {
+    padding-bottom: max(12px, var(--eve-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
     box-sizing: border-box !important;
 }
 
-/* Stop old EVE root transitions from animating viewport corrections. */
-html.eve-standalone body,
-html.eve-standalone #phone-screen,
-html.eve-standalone #phone-screen.fullscreen-mode {
+/* Never let the keyboard animation move/re-size the ROOT shell. */
+html.eve-ios-standalone,
+html.eve-ios-standalone body,
+html.eve-ios-standalone #phone-screen,
+html.eve-ios-standalone #phone-screen.fullscreen-mode {
     transition-property: none !important;
 }
 
-@media (orientation: landscape) {
-    html.eve-standalone .app-top-container {
-        padding-left: var(--eve-safe-left) !important;
-        padding-right: var(--eve-safe-right) !important;
+/* EVE's old iOS/mobile rules force body fixed. This higher-specificity standalone rule wins. */
+@supports (-webkit-touch-callout: none) {
+    html.eve-ios-standalone body,
+    html.eve-ios-standalone body.fullscreen-mode {
+        position: relative !important;
+        inset: auto !important;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    html.eve-ios-standalone body,
+    html.eve-ios-standalone body.fullscreen-mode {
+        position: relative !important;
+        inset: auto !important;
+        width: 100vw !important;
+        height: var(--eve-app-height, 100lvh) !important;
+    }
+
+    html.eve-ios-standalone #phone-screen,
+    html.eve-ios-standalone #phone-screen.fullscreen-mode {
+        position: fixed !important;
+        inset: 0 0 auto 0 !important;
+        margin: 0 !important;
+        transform: translateZ(0) !important;
     }
 }
