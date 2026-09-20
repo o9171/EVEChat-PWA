@@ -1,36 +1,35 @@
 (() => {
     'use strict';
 
-    const root = document.documentElement;
-
-    const isIOS = () => {
-        const ua = navigator.userAgent || '';
-        return /iPad|iPhone|iPod/.test(ua) ||
-            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    };
-
     const isStandalone = () =>
-        window.navigator.standalone === true ||
-        !!window.matchMedia?.('(display-mode: standalone)').matches ||
-        !!window.matchMedia?.('(display-mode: fullscreen)').matches;
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true;
 
-    if (!isIOS() || !isStandalone()) return;
+    if (!isStandalone()) return;
 
+    const root = document.documentElement;
     root.classList.add('eve-standalone');
 
-    let stableAppHeight = 0;
-    let stableTopGap = 0;
-    let raf = 0;
-    let wallpaper = null;
-    let phone = null;
     let backdrop = null;
     let overlay = null;
+    let phone = null;
+    let wallpaper = null;
+    let raf = 0;
     let observer = null;
-
-    const px = n => `${Math.max(0, Math.round(Number(n) || 0))}px`;
 
     const transparent = c =>
         !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)' || c === 'rgba(0,0,0,0)';
+
+    // Same stable-height logic as the working first PWA shell.
+    const setStableHeight = () => {
+        const screenH = Number(window.screen && window.screen.height) || 0;
+        const innerH = Number(window.innerHeight) || 0;
+        const clientH = Number(document.documentElement.clientHeight) || 0;
+        const h = Math.max(screenH, innerH, clientH);
+        if (h > 0) {
+            root.style.setProperty('--eve-app-height', `${Math.round(h)}px`);
+        }
+    };
 
     function ensureLayers() {
         if (!document.body) return false;
@@ -52,66 +51,7 @@
                 document.body.appendChild(overlay);
             }
         }
-
         return true;
-    }
-
-    function readSafeInsets() {
-        if (!document.body) return { top: 0, bottom: 0 };
-        const probe = document.createElement('div');
-        probe.style.cssText = [
-            'position:fixed',
-            'visibility:hidden',
-            'pointer-events:none',
-            'opacity:0',
-            'padding-top:env(safe-area-inset-top)',
-            'padding-bottom:env(safe-area-inset-bottom)'
-        ].join(';');
-        document.body.appendChild(probe);
-        const cs = getComputedStyle(probe);
-        const result = {
-            top: Math.round(parseFloat(cs.paddingTop) || 0),
-            bottom: Math.round(parseFloat(cs.paddingBottom) || 0)
-        };
-        probe.remove();
-        return result;
-    }
-
-    function updateGeometry() {
-        const innerH = Math.round(window.innerHeight || 0);
-        const clientH = Math.round(document.documentElement.clientHeight || 0);
-        const vvH = Math.round(window.visualViewport?.height || innerH || clientH || 0);
-        const vvTop = Math.round(window.visualViewport?.offsetTop || 0);
-
-        // Use ONLY the real interactive viewport for EVE's UI. Never screen.height.
-        const normalCandidate = Math.max(innerH, clientH, vvH + vvTop);
-
-        if (!stableAppHeight || normalCandidate > stableAppHeight) {
-            stableAppHeight = normalCandidate;
-        }
-
-        const keyboardOpen = vvH > 150 && stableAppHeight > 0 && vvH < stableAppHeight - 120;
-
-        // The top-gap is measured only while the keyboard is closed, then frozen.
-        if (!keyboardOpen) {
-            const screenH = Math.round(window.screen?.height || 0);
-            if (screenH > 0 && normalCandidate > 0) {
-                const measured = screenH - normalCandidate;
-                // iPhone Home-Screen status-bar gaps are normally under ~100 CSS px.
-                if (measured >= 0 && measured <= 120) stableTopGap = measured;
-            }
-        }
-
-        const physicalH = Math.max(stableAppHeight + stableTopGap, window.screen?.height || 0);
-
-        root.style.setProperty('--eve-app-height', px(stableAppHeight || normalCandidate));
-        root.style.setProperty('--eve-top-gap', px(stableTopGap));
-        root.style.setProperty('--eve-physical-height', px(physicalH));
-
-        if (keyboardOpen && vvTop > 0) {
-            // Do not move the app; only cancel iOS viewport scroll drift.
-            window.scrollTo(0, 0);
-        }
     }
 
     function isVisible(el) {
@@ -127,20 +67,20 @@
         if (!phone) return null;
         const screens = Array.from(phone.querySelectorAll(':scope > .app-screen'));
         let active = null;
-        for (const el of screens) {
-            if (isVisible(el)) active = el;
-        }
+        for (const el of screens) if (isVisible(el)) active = el;
         return active;
     }
 
-    function applyBackgroundFrom(source) {
+    function copyBackground(source) {
         if (!backdrop || !source) return;
         const cs = getComputedStyle(source);
-        const color = cs.backgroundColor;
-        const image = cs.backgroundImage;
 
-        backdrop.style.backgroundImage = image && image !== 'none' ? image : 'none';
-        backdrop.style.backgroundColor = transparent(color) ? 'transparent' : color;
+        backdrop.style.backgroundImage = cs.backgroundImage && cs.backgroundImage !== 'none'
+            ? cs.backgroundImage
+            : 'none';
+        backdrop.style.backgroundColor = transparent(cs.backgroundColor)
+            ? 'transparent'
+            : cs.backgroundColor;
         backdrop.style.backgroundSize = cs.backgroundSize || 'cover';
         backdrop.style.backgroundPosition = cs.backgroundPosition || 'center';
         backdrop.style.backgroundRepeat = cs.backgroundRepeat || 'no-repeat';
@@ -151,26 +91,24 @@
     function syncScene() {
         raf = 0;
         if (!ensureLayers()) return;
-        updateGeometry();
+        setStableHeight();
 
         if (!phone) phone = document.getElementById('phone-screen');
         if (!wallpaper) wallpaper = document.getElementById('wallpaper-element');
 
-        const activeScreen = getActiveAppScreen();
+        const active = getActiveAppScreen();
 
-        if (activeScreen) {
-            // An app page is open: continue that page's real background upward.
+        if (active) {
             if (wallpaper) wallpaper.classList.remove('eve-wallpaper-bridged');
-            applyBackgroundFrom(activeScreen);
+            copyBackground(active);
         } else if (wallpaper) {
-            // Home screen: the ENTIRE wallpaper paint lives on one full-screen layer.
-            // This is not a sampled color strip; it is the same image/color background.
+            // Read background first, then make the original wallpaper paint transparent.
             wallpaper.classList.remove('eve-wallpaper-bridged');
-            applyBackgroundFrom(wallpaper);
+            copyBackground(wallpaper);
             wallpaper.classList.add('eve-wallpaper-bridged');
         }
 
-        // Extend the currently visible dimmer over the same top-gap without moving UI.
+        // Mirror only the visible modal dimmer, not the modal card itself.
         const modalCandidates = Array.from(document.querySelectorAll(
             '.modal, .sms-manage-modal, #eve-terms-modal, .game-exit-overlay, #image-viewer-modal'
         ));
@@ -184,6 +122,7 @@
                 break;
             }
         }
+
         if (modalBg) {
             overlay.style.background = modalBg;
             overlay.style.display = 'block';
@@ -200,6 +139,7 @@
 
     function init() {
         if (document.body) document.body.classList.add('eve-standalone');
+        setStableHeight();
         ensureLayers();
         phone = document.getElementById('phone-screen');
         wallpaper = document.getElementById('wallpaper-element');
@@ -214,23 +154,14 @@
             });
         }
 
-        window.addEventListener('resize', scheduleSync, { passive: true });
-        window.addEventListener('orientationchange', () => {
-            stableAppHeight = 0;
-            stableTopGap = 0;
-            setTimeout(scheduleSync, 120);
-            setTimeout(scheduleSync, 500);
-        }, { passive: true });
         window.addEventListener('pageshow', scheduleSync, { passive: true });
+        window.addEventListener('orientationchange', () => {
+            setTimeout(scheduleSync, 350);
+            setTimeout(scheduleSync, 800);
+        }, { passive: true });
 
-        window.visualViewport?.addEventListener('resize', scheduleSync, { passive: true });
-        window.visualViewport?.addEventListener('scroll', scheduleSync, { passive: true });
-
-        document.addEventListener('focusin', scheduleSync, true);
-        document.addEventListener('focusout', () => setTimeout(scheduleSync, 220), true);
-
-        // iOS standalone can publish final viewport numbers late after cold launch.
-        [80, 250, 600, 1500, 3000].forEach(ms => setTimeout(scheduleSync, ms));
+        // Wallpaper/theme settings can be applied asynchronously after startup.
+        [80, 250, 600, 1200, 2500].forEach(ms => setTimeout(scheduleSync, ms));
     }
 
     if (document.readyState === 'loading') {
