@@ -1,168 +1,196 @@
 (() => {
     'use strict';
 
-    const isStandalone = () =>
-        window.matchMedia('(display-mode: standalone)').matches ||
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '') ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches ||
         window.navigator.standalone === true;
 
-    if (!isStandalone()) return;
+    if (!isIOS || !isStandalone) return;
 
     const root = document.documentElement;
     root.classList.add('eve-standalone');
 
-    let backdrop = null;
-    let overlay = null;
-    let phone = null;
-    let wallpaper = null;
-    let raf = 0;
-    let observer = null;
+    let stableHeight = 0;
+    let cachedTop = null;
+    let cachedBottom = null;
+    let syncRaf = 0;
+    let phoneObserver = null;
+    let wallpaperObserver = null;
 
-    const transparent = c =>
-        !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)' || c === 'rgba(0,0,0,0)';
+    const isTextEntry = (el) => el instanceof HTMLElement &&
+        (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
 
-    // Same stable-height logic as the working first PWA shell.
-    const setStableHeight = () => {
-        const screenH = Number(window.screen && window.screen.height) || 0;
-        const innerH = Number(window.innerHeight) || 0;
-        const clientH = Number(document.documentElement.clientHeight) || 0;
-        const h = Math.max(screenH, innerH, clientH);
-        if (h > 0) {
-            root.style.setProperty('--eve-app-height', `${Math.round(h)}px`);
+    const readSafeArea = () => {
+        if (!document.body) return { top: cachedTop || 0, bottom: cachedBottom || 0 };
+        const probe = document.createElement('div');
+        probe.style.cssText = [
+            'position:fixed',
+            'visibility:hidden',
+            'pointer-events:none',
+            'opacity:0',
+            'padding-top:env(safe-area-inset-top)',
+            'padding-bottom:env(safe-area-inset-bottom)'
+        ].join(';');
+        document.body.appendChild(probe);
+        const cs = getComputedStyle(probe);
+        const top = Math.round(parseFloat(cs.paddingTop) || 0);
+        const bottom = Math.round(parseFloat(cs.paddingBottom) || 0);
+        probe.remove();
+        if (cachedTop === null && top > 0) cachedTop = top;
+        if (cachedBottom === null && bottom > 0) cachedBottom = bottom;
+        return { top: cachedTop ?? top, bottom: cachedBottom ?? bottom };
+    };
+
+    const setViewportVars = () => {
+        const innerH = Math.round(window.innerHeight || 0);
+        const vv = window.visualViewport;
+        const vvH = Math.round(vv?.height || innerH);
+        const vvTop = Math.round(vv?.offsetTop || 0);
+        const safe = readSafeArea();
+
+        const obscured = Math.max(0, innerH - vvH - vvTop);
+        const keyboardInset = obscured > 120 ? obscured : 0;
+        const nextH = Math.max(innerH, vvH + vvTop);
+
+        if (!keyboardInset || !stableHeight) stableHeight = nextH;
+        const appHeight = stableHeight || nextH || Math.round(screen.height || 0);
+
+        root.style.setProperty('--eve-app-height', `${appHeight}px`);
+        root.style.setProperty('--eve-keyboard-inset', `${keyboardInset}px`);
+        root.style.setProperty('--eve-safe-top', `${safe.top > 0 ? safe.top : 0}px`);
+        root.style.setProperty('--eve-safe-bottom', `${safe.bottom > 0 ? safe.bottom : 0}px`);
+    };
+
+    const visible = (el) => {
+        if (!el) return false;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity || '1') === 0) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 2 && r.height > 2;
+    };
+
+    const activeScreen = () => {
+        const phone = document.getElementById('phone-screen');
+        if (!phone) return null;
+        const direct = Array.from(phone.children).filter(el => el.classList?.contains('app-screen'));
+        let found = null;
+        for (const el of direct) if (visible(el)) found = el;
+        return found;
+    };
+
+    const isTransparent = (value) => !value || value === 'transparent' ||
+        value === 'rgba(0, 0, 0, 0)' || value === 'rgba(0,0,0,0)';
+
+    /* SullyOS' key trick: mirror the REAL wallpaper onto html + body.
+       We do the same here. No extra DOM layer is created. */
+    const paintRootFrom = (source) => {
+        if (!source || !document.body) return;
+        const cs = getComputedStyle(source);
+        const img = cs.backgroundImage && cs.backgroundImage !== 'none' ? cs.backgroundImage : 'none';
+        const color = !isTransparent(cs.backgroundColor) ? cs.backgroundColor : '#d4e8f5';
+        const size = cs.backgroundSize || 'cover';
+        const pos = cs.backgroundPosition || 'center';
+        const repeat = cs.backgroundRepeat || 'no-repeat';
+
+        for (const el of [root, document.body]) {
+            el.style.setProperty('background-image', img, 'important');
+            el.style.setProperty('background-color', color, 'important');
+            el.style.setProperty('background-size', size, 'important');
+            el.style.setProperty('background-position', pos, 'important');
+            el.style.setProperty('background-repeat', repeat, 'important');
+            el.style.setProperty('background-attachment', 'scroll', 'important');
         }
     };
 
-    function ensureLayers() {
-        if (!document.body) return false;
+    const syncRootScene = () => {
+        syncRaf = 0;
+        setViewportVars();
 
-        if (!backdrop) {
-            backdrop = document.getElementById('eve-fullbleed-backdrop');
-            if (!backdrop) {
-                backdrop = document.createElement('div');
-                backdrop.id = 'eve-fullbleed-backdrop';
-                document.body.insertBefore(backdrop, document.body.firstChild);
-            }
-        }
+        const screen = activeScreen();
+        const wallpaper = document.getElementById('wallpaper-element');
 
-        if (!overlay) {
-            overlay = document.getElementById('eve-fullbleed-overlay');
-            if (!overlay) {
-                overlay = document.createElement('div');
-                overlay.id = 'eve-fullbleed-overlay';
-                document.body.appendChild(overlay);
-            }
-        }
-        return true;
-    }
-
-    function isVisible(el) {
-        if (!el) return false;
-        const cs = getComputedStyle(el);
-        if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return false;
-        const r = el.getBoundingClientRect();
-        return r.width > 1 && r.height > 1;
-    }
-
-    function getActiveAppScreen() {
-        if (!phone) phone = document.getElementById('phone-screen');
-        if (!phone) return null;
-        const screens = Array.from(phone.querySelectorAll(':scope > .app-screen'));
-        let active = null;
-        for (const el of screens) if (isVisible(el)) active = el;
-        return active;
-    }
-
-    function copyBackground(source) {
-        if (!backdrop || !source) return;
-        const cs = getComputedStyle(source);
-
-        backdrop.style.backgroundImage = cs.backgroundImage && cs.backgroundImage !== 'none'
-            ? cs.backgroundImage
-            : 'none';
-        backdrop.style.backgroundColor = transparent(cs.backgroundColor)
-            ? 'transparent'
-            : cs.backgroundColor;
-        backdrop.style.backgroundSize = cs.backgroundSize || 'cover';
-        backdrop.style.backgroundPosition = cs.backgroundPosition || 'center';
-        backdrop.style.backgroundRepeat = cs.backgroundRepeat || 'no-repeat';
-        backdrop.style.backgroundOrigin = cs.backgroundOrigin || 'padding-box';
-        backdrop.style.backgroundClip = cs.backgroundClip || 'border-box';
-    }
-
-    function syncScene() {
-        raf = 0;
-        if (!ensureLayers()) return;
-        setStableHeight();
-
-        if (!phone) phone = document.getElementById('phone-screen');
-        if (!wallpaper) wallpaper = document.getElementById('wallpaper-element');
-
-        const active = getActiveAppScreen();
-
-        if (active) {
-            if (wallpaper) wallpaper.classList.remove('eve-wallpaper-bridged');
-            copyBackground(active);
+        if (screen) {
+            const cs = getComputedStyle(screen);
+            const hasOwnPaint = (cs.backgroundImage && cs.backgroundImage !== 'none') || !isTransparent(cs.backgroundColor);
+            if (hasOwnPaint) paintRootFrom(screen);
+            else if (wallpaper) paintRootFrom(wallpaper);
         } else if (wallpaper) {
-            // Read background first, then make the original wallpaper paint transparent.
-            wallpaper.classList.remove('eve-wallpaper-bridged');
-            copyBackground(wallpaper);
-            wallpaper.classList.add('eve-wallpaper-bridged');
+            paintRootFrom(wallpaper);
         }
+    };
 
-        // Mirror only the visible modal dimmer, not the modal card itself.
-        const modalCandidates = Array.from(document.querySelectorAll(
-            '.modal, .sms-manage-modal, #eve-terms-modal, .game-exit-overlay, #image-viewer-modal'
-        ));
-        let modalBg = '';
-        for (let i = modalCandidates.length - 1; i >= 0; i--) {
-            const el = modalCandidates[i];
-            if (!isVisible(el)) continue;
-            const bg = getComputedStyle(el).backgroundColor;
-            if (bg && !transparent(bg)) {
-                modalBg = bg;
-                break;
-            }
-        }
+    const scheduleSync = () => {
+        if (syncRaf) return;
+        syncRaf = requestAnimationFrame(syncRootScene);
+    };
 
-        if (modalBg) {
-            overlay.style.background = modalBg;
-            overlay.style.display = 'block';
-        } else {
-            overlay.style.display = 'none';
-            overlay.style.background = 'transparent';
-        }
-    }
+    const installObservers = () => {
+        const phone = document.getElementById('phone-screen');
+        const wallpaper = document.getElementById('wallpaper-element');
 
-    function scheduleSync() {
-        if (raf) return;
-        raf = requestAnimationFrame(syncScene);
-    }
-
-    function init() {
-        if (document.body) document.body.classList.add('eve-standalone');
-        setStableHeight();
-        ensureLayers();
-        phone = document.getElementById('phone-screen');
-        wallpaper = document.getElementById('wallpaper-element');
-        syncScene();
-
-        if (phone && typeof MutationObserver !== 'undefined') {
-            observer = new MutationObserver(scheduleSync);
-            observer.observe(phone, {
+        if (phone && !phoneObserver) {
+            phoneObserver = new MutationObserver(scheduleSync);
+            phoneObserver.observe(phone, {
                 subtree: true,
                 attributes: true,
                 attributeFilter: ['style', 'class']
             });
         }
+        if (wallpaper && !wallpaperObserver) {
+            wallpaperObserver = new MutationObserver(scheduleSync);
+            wallpaperObserver.observe(wallpaper, {
+                attributes: true,
+                attributeFilter: ['style', 'class']
+            });
+        }
+    };
 
-        window.addEventListener('pageshow', scheduleSync, { passive: true });
-        window.addEventListener('orientationchange', () => {
-            setTimeout(scheduleSync, 350);
-            setTimeout(scheduleSync, 800);
-        }, { passive: true });
+    const init = () => {
+        if (!document.body) return;
+        document.body.classList.add('eve-standalone');
+        setViewportVars();
+        installObservers();
+        syncRootScene();
+        [100, 350, 800, 1600, 3000].forEach(ms => setTimeout(scheduleSync, ms));
+    };
 
-        // Wallpaper/theme settings can be applied asynchronously after startup.
-        [80, 250, 600, 1200, 2500].forEach(ms => setTimeout(scheduleSync, ms));
-    }
+    document.addEventListener('focusin', (e) => {
+        if (!isTextEntry(e.target)) return;
+        document.body?.classList.add('eve-keyboard-open');
+        setViewportVars();
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            try { e.target.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (_) {}
+        }));
+    });
+
+    document.addEventListener('focusout', () => {
+        setTimeout(() => {
+            if (!isTextEntry(document.activeElement)) document.body?.classList.remove('eve-keyboard-open');
+            setViewportVars();
+            scheduleSync();
+        }, 180);
+    });
+
+    window.addEventListener('resize', () => {
+        cachedTop = null;
+        cachedBottom = null;
+        if (!document.body?.classList.contains('eve-keyboard-open')) stableHeight = 0;
+        setViewportVars();
+        scheduleSync();
+    }, { passive: true });
+
+    window.addEventListener('orientationchange', () => {
+        cachedTop = null;
+        cachedBottom = null;
+        stableHeight = 0;
+        setTimeout(() => { setViewportVars(); scheduleSync(); }, 350);
+        setTimeout(() => { setViewportVars(); scheduleSync(); }, 800);
+    }, { passive: true });
+
+    window.visualViewport?.addEventListener('resize', () => { setViewportVars(); scheduleSync(); }, { passive: true });
+    window.visualViewport?.addEventListener('scroll', () => { setViewportVars(); }, { passive: true });
+    window.addEventListener('pageshow', scheduleSync, { passive: true });
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init, { once: true });

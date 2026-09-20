@@ -1,11 +1,7 @@
 /*
- * EVEChat PWA shell v3
- * Fix for v2 black-screen regression:
- * - keep EVE UI/layout exactly as the working v1 shell
- * - add ONE full-screen non-interactive paint layer behind EVE
- * - on Home, move only the wallpaper paint to that layer so the SAME wallpaper
- *   continues behind the iOS status icons
- * - never move/translate the interactive UI
+ * EVEChat PWA shell v4 — mirror SullyOS' real strategy.
+ * No fake top bar, no bridge layer, no dim overlay.
+ * The iOS status-bar canvas reads the SAME root background as EVE.
  */
 
 :root {
@@ -14,6 +10,7 @@
     --eve-safe-right: env(safe-area-inset-right, 0px);
     --eve-safe-bottom: env(safe-area-inset-bottom, 0px);
     --eve-safe-left: env(safe-area-inset-left, 0px);
+    --eve-keyboard-inset: 0px;
 }
 
 html.eve-standalone,
@@ -27,7 +24,9 @@ html.eve-standalone body {
     padding: 0 !important;
     overflow: hidden !important;
     overscroll-behavior: none !important;
-    background: transparent !important;
+    background-position: center !important;
+    background-size: cover !important;
+    background-repeat: no-repeat !important;
 }
 
 html.eve-standalone body {
@@ -39,49 +38,18 @@ html.eve-standalone body {
     justify-content: initial !important;
 }
 
+/* Neutralize EVE's old full-screen black fallback. The real root background is
+   written inline by pwa-shell.js with !important, exactly like SullyOS mirrors
+   its wallpaper onto html/body. */
 html.eve-standalone body.fullscreen-mode {
-    background: transparent !important;
     padding: 0 !important;
     overflow: hidden !important;
-}
-
-/* This layer is the real visual background bridge. It is not a sampled color bar. */
-html.eve-standalone #eve-fullbleed-backdrop {
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100vw !important;
-    height: var(--eve-app-height) !important;
-    min-height: var(--eve-app-height) !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    pointer-events: none !important;
-    z-index: 0 !important;
-    box-sizing: border-box !important;
-    transform: translateZ(0) !important;
-    -webkit-transform: translateZ(0) !important;
-    background-attachment: scroll !important;
-}
-
-/* Modal dimmer bridge for the status-bar area. */
-html.eve-standalone #eve-fullbleed-overlay {
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100vw !important;
-    height: var(--eve-app-height) !important;
-    pointer-events: none !important;
-    z-index: 8999 !important;
-    display: none;
-    background: transparent;
 }
 
 html.eve-standalone #phone-screen,
 html.eve-standalone #phone-screen.fullscreen-mode {
     position: fixed !important;
     inset: 0 !important;
-    top: 0 !important;
-    right: 0 !important;
-    bottom: auto !important;
-    left: 0 !important;
     width: 100vw !important;
     min-width: 100vw !important;
     max-width: 100vw !important;
@@ -96,18 +64,15 @@ html.eve-standalone #phone-screen.fullscreen-mode {
     transform: none !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
-    z-index: 1 !important;
-    /* CRITICAL: v2 left EVE's old black phone background above the bridge. */
-    background: transparent !important;
     background-color: transparent !important;
 }
 
+/* The wallpaper itself uses the exact same canvas geometry as the root, so
+   background-size:cover/background-position:center line up with no seam. */
 html.eve-standalone #wallpaper-element,
 html.eve-standalone .wallpaper#wallpaper-element {
     position: absolute !important;
     inset: 0 !important;
-    top: 0 !important;
-    left: 0 !important;
     width: 100% !important;
     height: 100% !important;
     min-height: 100% !important;
@@ -115,14 +80,6 @@ html.eve-standalone .wallpaper#wallpaper-element {
     margin: 0 !important;
     transform: none !important;
     box-sizing: border-box !important;
-}
-
-/* Home only: background paint is moved to the one full-screen bridge layer.
-   Children (clock/apps/dock) do NOT move. */
-html.eve-standalone #wallpaper-element.eve-wallpaper-bridged {
-    background: transparent !important;
-    background-image: none !important;
-    background-color: transparent !important;
 }
 
 html.eve-standalone #phone-screen > .app-screen,
@@ -138,6 +95,8 @@ html.eve-standalone .app-screen {
     box-sizing: border-box !important;
 }
 
+/* Use the real iOS status bar in installed mode. Background stays full-bleed;
+   only interactive/header content gets safe-area spacing. */
 html.eve-standalone #status-bar,
 html.eve-standalone .app-status-bar {
     display: none !important;
@@ -154,10 +113,10 @@ html.eve-standalone .app-screen > .header:first-child {
     box-sizing: border-box !important;
 }
 
+/* Stop old EVE root transitions from animating viewport corrections. */
 html.eve-standalone body,
 html.eve-standalone #phone-screen,
-html.eve-standalone #phone-screen.fullscreen-mode,
-html.eve-standalone #eve-fullbleed-backdrop {
+html.eve-standalone #phone-screen.fullscreen-mode {
     transition-property: none !important;
 }
 
