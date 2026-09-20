@@ -1,9 +1,9 @@
 {
-  "id": "./index.html?v=9",
+  "id": "./index.html?v=10",
   "name": "EVEChat",
   "short_name": "EVEChat",
   "description": "EVEChat",
-  "start_url": "./index.html?v=9",
+  "start_url": "./index.html?v=10",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
