@@ -120,8 +120,51 @@
         }
     };
 
+    let keyboardFrozen = false;
+    let frozenPaint = null;
+
+    const capturePaint = () => {
+        const screen = activeScreen();
+        const wallpaper = document.getElementById('wallpaper-element');
+        let source = wallpaper;
+        if (screen) {
+            const cs = getComputedStyle(screen);
+            const hasOwnPaint = (cs.backgroundImage && cs.backgroundImage !== 'none') || !isTransparent(cs.backgroundColor);
+            if (hasOwnPaint) source = screen;
+        }
+        if (!source) return null;
+        const cs = getComputedStyle(source);
+        return {
+            image: cs.backgroundImage && cs.backgroundImage !== 'none' ? cs.backgroundImage : 'none',
+            color: !isTransparent(cs.backgroundColor) ? cs.backgroundColor : '#d4e8f5',
+            size: cs.backgroundSize || 'cover',
+            pos: cs.backgroundPosition || 'center',
+            repeat: cs.backgroundRepeat || 'no-repeat'
+        };
+    };
+
+    const applyFrozenPaint = () => {
+        if (!frozenPaint || !document.body) return;
+        for (const el of [root, document.body]) {
+            el.style.setProperty('background-image', frozenPaint.image, 'important');
+            el.style.setProperty('background-color', frozenPaint.color, 'important');
+            el.style.setProperty('background-size', frozenPaint.size, 'important');
+            el.style.setProperty('background-position', frozenPaint.pos, 'important');
+            el.style.setProperty('background-repeat', frozenPaint.repeat, 'important');
+        }
+    };
+
+    const freezeKeyboardFrame = () => {
+        if (keyboardFrozen) return;
+        setViewportVars();
+        frozenPaint = capturePaint();
+        applyFrozenPaint();
+        keyboardFrozen = true;
+        document.body?.classList.add('eve-keyboard-open');
+    };
+
     const scheduleSync = () => {
-        if (syncRaf) return;
+        if (keyboardFrozen || syncRaf) return;
         syncRaf = requestAnimationFrame(syncRootScene);
     };
 
@@ -155,32 +198,45 @@
         [100, 350, 800, 1600, 3000].forEach(ms => setTimeout(scheduleSync, ms));
     };
 
+    const preFreeze = (e) => {
+        const target = e.target?.closest?.('input, textarea, select, [contenteditable="true"]');
+        if (target && isTextEntry(target)) freezeKeyboardFrame();
+    };
+
+    document.addEventListener('pointerdown', preFreeze, true);
+    document.addEventListener('touchstart', preFreeze, { capture: true, passive: true });
+
     document.addEventListener('focusin', (e) => {
-        if (!isTextEntry(e.target)) return;
-        document.body?.classList.add('eve-keyboard-open');
-        setViewportVars();
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-            try { e.target.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (_) {}
-        }));
-    });
+        if (isTextEntry(e.target)) freezeKeyboardFrame();
+    }, true);
 
     document.addEventListener('focusout', () => {
         setTimeout(() => {
-            if (!isTextEntry(document.activeElement)) document.body?.classList.remove('eve-keyboard-open');
+            if (isTextEntry(document.activeElement)) return;
+            keyboardFrozen = false;
+            document.body?.classList.remove('eve-keyboard-open');
+            cachedTop = null;
+            cachedBottom = null;
+            stableHeight = 0;
             setViewportVars();
             scheduleSync();
-        }, 180);
-    });
+        }, 350);
+    }, true);
 
     window.addEventListener('resize', () => {
+        if (keyboardFrozen) {
+            applyFrozenPaint();
+            return;
+        }
         cachedTop = null;
         cachedBottom = null;
-        if (!document.body?.classList.contains('eve-keyboard-open')) stableHeight = 0;
+        stableHeight = 0;
         setViewportVars();
         scheduleSync();
     }, { passive: true });
 
     window.addEventListener('orientationchange', () => {
+        if (keyboardFrozen) return;
         cachedTop = null;
         cachedBottom = null;
         stableHeight = 0;
@@ -188,9 +244,26 @@
         setTimeout(() => { setViewportVars(); scheduleSync(); }, 800);
     }, { passive: true });
 
-    window.visualViewport?.addEventListener('resize', () => { setViewportVars(); scheduleSync(); }, { passive: true });
-    window.visualViewport?.addEventListener('scroll', () => { setViewportVars(); }, { passive: true });
-    window.addEventListener('pageshow', scheduleSync, { passive: true });
+    window.visualViewport?.addEventListener('resize', () => {
+        if (keyboardFrozen) {
+            applyFrozenPaint();
+            return;
+        }
+        setViewportVars();
+        scheduleSync();
+    }, { passive: true });
+
+    window.visualViewport?.addEventListener('scroll', () => {
+        if (keyboardFrozen) {
+            applyFrozenPaint();
+            return;
+        }
+        setViewportVars();
+    }, { passive: true });
+
+    window.addEventListener('pageshow', () => {
+        if (!keyboardFrozen) scheduleSync();
+    }, { passive: true });
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init, { once: true });
