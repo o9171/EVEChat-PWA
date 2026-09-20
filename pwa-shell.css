@@ -1,67 +1,58 @@
 /*
- * EVEChat iOS standalone shell v7
- * Structure follows SullyOS: exactly ONE viewport-fixed outer shell.
- * EVE's old mobile rules created additional fixed/composited children;
- * those are anchored inside the shell instead of to iOS visual viewport.
+ * EVEChat iOS standalone shell v8
+ * Structure follows SullyOS: stable root height + one fixed outer shell,
+ * wallpaper on the root canvas, and overlays positioned inside the shell.
  */
 
 :root {
     --eve-app-height: 100lvh;
-    --eve-visual-viewport-height: 100lvh;
+    --eve-visual-height: 100lvh;
     --eve-keyboard-inset: 0px;
     --eve-safe-top: env(safe-area-inset-top, 0px);
+    --eve-safe-right: env(safe-area-inset-right, 0px);
     --eve-safe-bottom: env(safe-area-inset-bottom, 0px);
     --eve-safe-left: env(safe-area-inset-left, 0px);
-    --eve-safe-right: env(safe-area-inset-right, 0px);
 }
 
-html.eve-ios-standalone,
-html.eve-ios-standalone body {
+html.eve-standalone,
+html.eve-standalone body {
     width: 100% !important;
     min-width: 100% !important;
     height: var(--eve-app-height, 100lvh) !important;
     min-height: var(--eve-app-height, 100lvh) !important;
+    max-height: var(--eve-app-height, 100lvh) !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
+    background-position: center !important;
+    background-size: cover !important;
+    background-repeat: no-repeat !important;
 }
 
-html.eve-ios-standalone {
-    overscroll-behavior: none !important;
-}
-
-/* Do not make body another fixed/relative viewport layer. */
-html.eve-ios-standalone body,
-html.eve-ios-standalone body.fullscreen-mode {
+/* SullyOS does NOT keep body fixed in installed iOS mode. */
+html.eve-standalone body {
     position: static !important;
-    top: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    left: auto !important;
     inset: auto !important;
-    width: 100vw !important;
-    max-width: none !important;
-    height: var(--eve-app-height, 100lvh) !important;
-    min-height: var(--eve-app-height, 100lvh) !important;
-    max-height: none !important;
     display: block !important;
-    margin: 0 !important;
-    padding: 0 !important;
     transform: none !important;
-    -webkit-transform: none !important;
-    perspective: none !important;
-    overflow: hidden !important;
-    overscroll-behavior: none !important;
     align-items: initial !important;
     justify-content: initial !important;
+    overscroll-behavior-x: none !important;
+    overscroll-behavior-y: auto !important;
 }
 
-/* The ONLY fixed full-screen layer. No translateZ/compositing transform here. */
-html.eve-ios-standalone #phone-screen,
-html.eve-ios-standalone #phone-screen.fullscreen-mode {
+html.eve-standalone body.fullscreen-mode {
+    background-color: transparent !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    align-items: initial !important;
+}
+
+/* One fixed outer shell, same idea as SullyOS App.tsx. */
+html.eve-standalone #phone-screen,
+html.eve-standalone #phone-screen.fullscreen-mode {
     position: fixed !important;
-    inset: 0 !important;
     top: 0 !important;
     right: 0 !important;
     bottom: auto !important;
@@ -78,20 +69,14 @@ html.eve-ios-standalone #phone-screen.fullscreen-mode {
     border-radius: 0 !important;
     box-shadow: none !important;
     transform: none !important;
-    -webkit-transform: none !important;
-    will-change: auto !important;
-    perspective: none !important;
-    contain: none !important;
-    backface-visibility: visible !important;
-    -webkit-backface-visibility: visible !important;
-    overflow: hidden !important;
-    flex-shrink: 0 !important;
-    box-sizing: border-box !important;
     transition: none !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    background: transparent !important;
 }
 
-html.eve-ios-standalone #wallpaper-element,
-html.eve-ios-standalone .wallpaper#wallpaper-element {
+html.eve-standalone #wallpaper-element,
+html.eve-standalone .wallpaper#wallpaper-element {
     position: absolute !important;
     inset: 0 !important;
     width: 100% !important;
@@ -100,160 +85,63 @@ html.eve-ios-standalone .wallpaper#wallpaper-element {
     max-height: none !important;
     margin: 0 !important;
     transform: none !important;
-    -webkit-transform: none !important;
-    background-size: cover !important;
-    background-position: center !important;
     box-sizing: border-box !important;
 }
 
-html.eve-ios-standalone .app-screen {
+/* App pages stay inside the outer shell. */
+html.eve-standalone #phone-screen .app-screen {
+    box-sizing: border-box !important;
+}
+
+/* This was the missing structural difference: SullyOS overlays are absolute
+   inside its fixed PhoneShell, not fixed directly to the browser viewport. */
+html.eve-standalone #phone-screen .modal,
+html.eve-standalone #phone-screen .modal-overlay,
+html.eve-standalone #phone-screen [id$="-modal"].modal,
+html.eve-standalone #phone-screen [id$="-overlay"].modal-overlay {
     position: absolute !important;
     inset: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    min-height: 100% !important;
-    max-height: none !important;
-    box-sizing: border-box !important;
-}
-
-/* iOS supplies the real status bar. EVE's simulated one stays hidden. */
-html.eve-ios-standalone #status-bar,
-html.eve-ios-standalone .app-status-bar {
-    display: none !important;
-}
-
-html.eve-ios-standalone .app-top-container {
-    padding-top: var(--eve-safe-top, env(safe-area-inset-top, 0px)) !important;
-    box-sizing: border-box !important;
-}
-
-html.eve-ios-standalone #dock-bar {
-    padding-bottom: max(12px, var(--eve-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
-    box-sizing: border-box !important;
-}
-
-/*
- * This is the EVE-specific part that v6 was missing.
- * The original file turns input bars and overlays into viewport-fixed layers on mobile.
- * In SullyOS, inner screens/overlays live INSIDE the fixed app shell.
- */
-
-/* Main chat: restore its own original absolute-to-screen behavior. */
-html.eve-ios-standalone body.fullscreen-mode #phone-screen.fullscreen-mode .chat-input-area,
-html.eve-ios-standalone #phone-screen .chat-input-area {
-    position: absolute !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    width: 100% !important;
-    margin: 0 !important;
-    transform: none !important;
-    -webkit-transform: none !important;
-}
-
-/* Offline mode is a flex column; keep its input in normal flow, not viewport-fixed. */
-html.eve-ios-standalone body.fullscreen-mode #phone-screen.fullscreen-mode .offline-input-area,
-html.eve-ios-standalone #phone-screen .offline-input-area {
-    position: relative !important;
-    top: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    left: auto !important;
-    width: auto !important;
-    margin: 0 !important;
-    transform: none !important;
-    -webkit-transform: none !important;
-}
-
-html.eve-ios-standalone #phone-screen .offline-mode-content {
-    height: auto !important;
-    min-height: 0 !important;
-    flex: 1 1 auto !important;
-}
-
-/* Full-screen overlays that are children of the wallpaper/shell must be shell-absolute. */
-html.eve-ios-standalone #phone-screen .modal,
-html.eve-ios-standalone #phone-screen .modal-overlay,
-html.eve-ios-standalone #phone-screen .sms-manage-modal,
-html.eve-ios-standalone #phone-screen .difficulty-settings-modal,
-html.eve-ios-standalone #phone-screen .image-preview-modal,
-html.eve-ios-standalone #phone-screen .phone-refresh-confirm-overlay,
-html.eve-ios-standalone #phone-screen .payment-details-modal,
-html.eve-ios-standalone #phone-screen .custom-confirm,
-html.eve-ios-standalone #phone-screen .batch-preview-overlay,
-html.eve-ios-standalone #phone-screen .batch-preview-modal,
-html.eve-ios-standalone #phone-screen .waiting-modal,
-html.eve-ios-standalone #phone-screen #offline-preset-modal,
-html.eve-ios-standalone #phone-screen #offline-ui-settings-modal,
-html.eve-ios-standalone #phone-screen #memorySettingsModal,
-html.eve-ios-standalone #phone-screen #global-memory-modal,
-html.eve-ios-standalone #phone-screen #memory-share-modal {
-    position: absolute !important;
-    inset: 0 !important;
-    top: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    left: 0 !important;
     width: 100% !important;
     height: 100% !important;
     max-width: none !important;
     max-height: none !important;
-    transform: none !important;
-    -webkit-transform: none !important;
 }
 
-/* Other EVE controls that were made viewport-fixed: anchor them to the stable app screen. */
-html.eve-ios-standalone #phone-screen .bottom-comment-input,
-html.eve-ios-standalone #phone-screen .sms-input-section,
-html.eve-ios-standalone #phone-screen .diary-delete-actions,
-html.eve-ios-standalone #phone-screen .floating-delete-btn,
-html.eve-ios-standalone #phone-screen .custom-emoji-panel {
+/* EVE's old mobile rule force-changed the chat composer back to fixed.
+   Keep it shell-relative, matching its normal desktop rule. */
+html.eve-standalone body.fullscreen-mode #phone-screen.fullscreen-mode .chat-input-area,
+html.eve-standalone body.fullscreen-mode #phone-screen.fullscreen-mode .offline-input-area {
     position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
     transform: none !important;
     -webkit-transform: none !important;
 }
 
-/* Do not let vh-based modal sizing collapse when the keyboard opens. */
-html.eve-ios-standalone #anniversary-form-modal .modal-content,
-html.eve-ios-standalone #appointment-form-modal .modal-content {
-    max-height: 90% !important;
+/* Real iOS status bar is used in Home Screen mode. */
+html.eve-standalone #status-bar,
+html.eve-standalone .app-status-bar {
+    display: none !important;
 }
 
-/* No transition/transform on root layers during keyboard animation. */
-html.eve-ios-standalone,
-html.eve-ios-standalone body,
-html.eve-ios-standalone #phone-screen,
-html.eve-ios-standalone #wallpaper-element {
-    transition: none !important;
+/* Only controls get safe-area spacing; the background itself remains full bleed. */
+html.eve-standalone .app-top-container {
+    padding-top: var(--eve-safe-top) !important;
+    box-sizing: border-box !important;
 }
 
-@supports (-webkit-touch-callout: none) {
-    html.eve-ios-standalone body,
-    html.eve-ios-standalone body.fullscreen-mode {
-        position: static !important;
-        inset: auto !important;
-        transform: none !important;
-        -webkit-transform: none !important;
-    }
+html.eve-standalone .app-screen > .app-header:first-child,
+html.eve-standalone .app-screen > .header:first-child {
+    padding-top: calc(var(--eve-safe-top) + 6px) !important;
+    box-sizing: border-box !important;
 }
 
-@media screen and (max-width: 768px) {
-    html.eve-ios-standalone body,
-    html.eve-ios-standalone body.fullscreen-mode {
-        position: static !important;
-        inset: auto !important;
-        width: 100vw !important;
-        height: var(--eve-app-height, 100lvh) !important;
-        transform: none !important;
-        -webkit-transform: none !important;
-    }
-
-    html.eve-ios-standalone #phone-screen,
-    html.eve-ios-standalone #phone-screen.fullscreen-mode {
-        position: fixed !important;
-        inset: 0 !important;
-        margin: 0 !important;
-        transform: none !important;
-        -webkit-transform: none !important;
+@media (orientation: landscape) {
+    html.eve-standalone .app-top-container {
+        padding-left: var(--eve-safe-left) !important;
+        padding-right: var(--eve-safe-right) !important;
     }
 }
