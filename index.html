@@ -39313,7 +39313,8 @@ body[data-theme="dark"] #eve-gpt-image-section .eve-lock-title{color:var(--theme
 
                                 <div class="nm-together-main">
                                     <div class="nm-together-icon">
-                                        <i class="fas fa-headphones"></i>
+                                        <img id="nm-together-avatar" class="nm-together-avatar" alt="">
+                                        <i id="nm-together-avatar-fallback" class="fas fa-headphones"></i>
                                     </div>
                                     <div class="nm-together-copy">
                                         <div id="nm-together-title" class="nm-together-title">还没有开始一起听</div>
@@ -57864,6 +57865,48 @@ This EVE integration is an independent adaptation for a different single-file ap
         var text=q('nm-together-text');
         var songEl=q('nm-together-song');
 
+        /* v56：一起听显示已绑定角色头像；没绑定时显示当前聊天角色头像 */
+        var avatarEl=q('nm-together-avatar');
+        var avatarFallback=q('nm-together-avatar-fallback');
+        var avatarCharacter=null;
+
+        try{
+            if(state.togetherCharacterId && typeof characters!=='undefined' && Array.isArray(characters)){
+                avatarCharacter=characters.find(function(item){
+                    return item && String(item.id)===String(state.togetherCharacterId);
+                }) || null;
+            }
+        }catch(_){}
+
+        if(!avatarCharacter && ch) avatarCharacter=ch;
+
+        var avatarSrc='';
+        if(avatarCharacter){
+            avatarSrc=
+                avatarCharacter.avatarUrl ||
+                avatarCharacter.avatar ||
+                avatarCharacter.image ||
+                avatarCharacter.profileImage ||
+                '';
+        }
+
+        if(avatarSrc){
+            try{
+                if(typeof httpsUrl==='function') avatarSrc=httpsUrl(avatarSrc);
+            }catch(_){}
+            if(avatarEl){
+                avatarEl.src=avatarSrc;
+                avatarEl.style.display='block';
+            }
+            if(avatarFallback) avatarFallback.style.display='none';
+        }else{
+            if(avatarEl){
+                avatarEl.removeAttribute('src');
+                avatarEl.style.display='none';
+            }
+            if(avatarFallback) avatarFallback.style.display='flex';
+        }
+
         if(state.currentSong){
             if(title){
                 title.textContent=boundName ? ('正在和 '+boundName+' 一起听') : '正在听网易云音乐';
@@ -62789,6 +62832,253 @@ This EVE integration is an independent adaptation for a different single-file ap
     flex-basis:32px!important;
 }
 </style>
+
+
+<style id="eve-v56-seven-fixes">
+/* =========================================================
+   v56：只处理用户点名的 7 项
+   ========================================================= */
+
+/* 1. 左上图片 + 右下纪念日：强制 1:1 */
+#home-grid .home-section.top-left,
+#home-grid .home-section.bottom-right {
+    aspect-ratio: 1 / 1 !important;
+}
+
+#home-grid .home-section.top-left .photo-widget,
+#home-grid .home-section.bottom-right .anniversary-widget {
+    width: 100% !important;
+    height: 100% !important;
+    aspect-ratio: 1 / 1 !important;
+    box-sizing: border-box !important;
+}
+
+/* 2. 右上四个入口再松散一点，不改结构 */
+#home-grid .home-section.top-right {
+    padding: 0 !important;
+}
+#home-grid .apps-grid-4 {
+    column-gap: 26px !important;
+    row-gap: 20px !important;
+    padding: 2px 2px !important;
+    box-sizing: border-box !important;
+}
+#home-grid .apps-grid-4 .mini-app-icon {
+    margin-bottom: 5px !important;
+}
+
+/* 3. 左边图片小组件去阴影（正常/按压/hover 全部去掉） */
+#home-grid .photo-widget,
+#home-grid .photo-widget:hover,
+#home-grid .home-section.top-left .widget,
+#home-grid .home-section.top-left .widget:hover {
+    box-shadow: none !important;
+}
+
+/* 4. 音乐主页顶栏和内容整体往上；底部播放预览抬高 */
+#netease-music-screen .nm-topbar {
+    min-height: 68px !important;
+    padding: 10px 14px 8px !important;
+}
+#netease-music-screen .nm-scroll {
+    padding-top: 78px !important;
+    padding-bottom: 122px !important;
+}
+#netease-music-screen .nm-mini-player {
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 20px) !important;
+}
+
+/* 音乐子页同样去掉“重复安全区”造成的下坠 */
+#nm-playlist-screen .nm-playlist-nav {
+    height: 68px !important;
+    padding: 10px 14px 8px !important;
+}
+#nm-search-screen .music-search-header {
+    padding-top: 10px !important;
+}
+#nm-daily-screen .nm-library-header,
+#nm-liked-screen .nm-library-header {
+    min-height: 68px !important;
+    padding: 10px 14px 8px !important;
+}
+#nm-now-screen .np-topbar {
+    padding-top: 10px !important;
+}
+
+/* 6. 一起听：中间改角色头像 */
+#netease-music-screen .nm-together-icon {
+    overflow: hidden !important;
+    border-radius: 50% !important;
+    padding: 0 !important;
+}
+#netease-music-screen .nm-together-avatar {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: none;
+}
+#netease-music-screen #nm-together-avatar-fallback {
+    width: 100% !important;
+    height: 100% !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* 7. 歌词页底部进度条 + 三个播放按钮整体抬高 */
+#nm-lyrics-screen .am-lyrics-bottom {
+    margin-bottom: 28px !important;
+}
+</style>
+
+
+<script id="eve-v56-music-status-sync">
+(function(){
+    'use strict';
+
+    var root=document.documentElement;
+    var meta=document.getElementById('eve-dynamic-theme-color');
+    var timer=0;
+
+    function shown(el){
+        if(!el) return false;
+        var cs=getComputedStyle(el);
+        if(cs.display==='none' || cs.visibility==='hidden' || Number(cs.opacity||1)===0) return false;
+        var r=el.getBoundingClientRect();
+        return r.width>1 && r.height>1;
+    }
+
+    function isShow(id){
+        var el=document.getElementById(id);
+        return !!(el && el.classList.contains('show') && shown(el));
+    }
+
+    function bgImage(id){
+        var el=document.getElementById(id);
+        if(!el) return 'none';
+        var img=getComputedStyle(el).backgroundImage;
+        return img && img!=='none' ? img : 'none';
+    }
+
+    function setSurface(color,image,position){
+        root.style.setProperty('--eve-status-surface-color',color);
+        root.style.setProperty('--eve-status-surface-image',image||'none');
+        root.style.setProperty('--eve-status-surface-size','cover');
+        root.style.setProperty('--eve-status-surface-position',position||'center center');
+        root.style.setProperty('--eve-status-surface-repeat','no-repeat');
+        root.classList.add('eve-status-surface-active');
+        if(meta) meta.setAttribute('content',color);
+    }
+
+    function musicHomeOpen(){
+        var el=document.getElementById('netease-music-screen');
+        return shown(el);
+    }
+
+    function sync(){
+        timer=0;
+
+        /* 歌词：跟封面背景染深色 */
+        if(isShow('nm-lyrics-screen')){
+            var lyricImg=bgImage('nm-lyrics-bg');
+            setSurface(
+                '#242326',
+                lyricImg!=='none'
+                    ? 'linear-gradient(rgba(30,30,32,.62),rgba(30,30,32,.62)),'+lyricImg
+                    : 'none'
+            );
+            return;
+        }
+
+        /* 正在播放：跟当前歌曲封面背景 */
+        if(isShow('nm-now-screen')){
+            var nowImg=bgImage('nm-now-bg');
+            setSurface(
+                '#242326',
+                nowImg!=='none'
+                    ? 'linear-gradient(rgba(24,24,27,.58),rgba(24,24,27,.58)),'+nowImg
+                    : 'none'
+            );
+            return;
+        }
+
+        /* 歌单详情：跟歌单封面背景 */
+        if(isShow('nm-playlist-screen')){
+            var listImg=bgImage('nm-playlist-bg');
+            setSurface(
+                '#27232b',
+                listImg!=='none'
+                    ? 'linear-gradient(rgba(0,0,0,.24),rgba(0,0,0,.24)),'+listImg
+                    : 'none'
+            );
+            return;
+        }
+
+        /* 搜索/日推/喜欢：跟各自浅色顶栏 */
+        if(isShow('nm-search-screen')){
+            setSurface('#f5f5f7','none');
+            return;
+        }
+        if(isShow('nm-daily-screen') || isShow('nm-liked-screen')){
+            setSurface('#f7f7f8','none');
+            return;
+        }
+
+        /* 网易云主页 */
+        if(musicHomeOpen()){
+            setSurface('#f4f5f7','none');
+        }
+    }
+
+    function schedule(){
+        clearTimeout(timer);
+        requestAnimationFrame(sync);
+        timer=setTimeout(sync,70);
+    }
+
+    function init(){
+        var ids=[
+            'netease-music-screen',
+            'nm-playlist-screen',
+            'nm-now-screen',
+            'nm-lyrics-screen',
+            'nm-search-screen',
+            'nm-daily-screen',
+            'nm-liked-screen',
+            'nm-playlist-bg',
+            'nm-now-bg',
+            'nm-lyrics-bg'
+        ];
+
+        if(window.MutationObserver){
+            var mo=new MutationObserver(schedule);
+            ids.forEach(function(id){
+                var el=document.getElementById(id);
+                if(!el) return;
+                try{
+                    mo.observe(el,{
+                        attributes:true,
+                        attributeFilter:['class','style']
+                    });
+                }catch(_){}
+            });
+        }
+
+        window.addEventListener('resize',schedule,{passive:true});
+        window.addEventListener('pageshow',schedule,{passive:true});
+        document.addEventListener('visibilitychange',function(){
+            if(!document.hidden) schedule();
+        });
+
+        schedule();
+    }
+
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',init,{once:true});
+    }else{
+        init();
+    }
+})();
+</script>
 
 </body>
 </html>
