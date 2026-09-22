@@ -63178,46 +63178,6 @@ This EVE integration is an independent adaptation for a different single-file ap
 
 
 <style id="eve-v58-final-three-fixes">
-/* 1) 主屏：彻底锁住四宫格尺寸，避免 iOS 滑动后 grid item 撑大、错位 */
-#phone-screen.fullscreen-mode #home-grid,
-#home-grid {
-    grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
-    grid-template-rows:minmax(0,1fr) minmax(0,1fr)!important;
-}
-#home-grid > .home-section {
-    min-width:0!important;
-    min-height:0!important;
-    overflow:visible!important;
-}
-#home-grid .home-section.top-left,
-#home-grid .home-section.bottom-right {
-    aspect-ratio:auto!important;
-}
-#home-grid .home-section.top-left .photo-widget,
-#home-grid .home-section.bottom-right .anniversary-widget {
-    width:100%!important;
-    height:100%!important;
-    min-width:0!important;
-    min-height:0!important;
-    max-width:100%!important;
-    max-height:100%!important;
-    aspect-ratio:auto!important;
-    transform:none!important;
-}
-#home-grid .photo-widget:hover,
-#home-grid .anniversary-widget:hover {
-    transform:none!important;
-}
-#home-grid .photo-widget-image {
-    inset:0!important;
-    width:100%!important;
-    height:100%!important;
-    max-width:100%!important;
-    max-height:100%!important;
-    object-fit:cover!important;
-    transform:none!important;
-}
-
 /* 2) 播放器页面：让页面本身延伸到顶部安全区，状态栏区域直接吃当前播放背景 */
 body:has(#nm-now-screen.show),
 body:has(#nm-lyrics-screen.show) {
@@ -63325,6 +63285,65 @@ html:has(#nm-lyrics-screen.show) {
     schedule();
 })();
 </script>
+
+
+<style id="eve-v59-home-widgets-from-v38">
+/* ===== 首页图片 + 纪念日：完全按 v38 的正常写法恢复 ===== */
+
+/* 左上图片 / 右下纪念日：1:1，但不去撑 grid 高度 */
+#home-grid .home-section.top-left .photo-widget,
+#home-grid .home-section.bottom-right .anniversary-widget {
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1 !important;
+    box-sizing: border-box !important;
+    flex: 0 0 auto !important;
+}
+
+/* 内部内容跟随外框 */
+#home-grid .home-section.top-left .photo-widget-content,
+#home-grid .home-section.bottom-right .anniversary-widget-content {
+    width: 100% !important;
+    height: 100% !important;
+    box-sizing: border-box !important;
+}
+
+/* 图片固定铺满自己的 1:1 小组件，不参与外层尺寸计算 */
+#home-grid .photo-widget-image {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: cover !important;
+    object-position: center !important;
+    inset: 0 !important;
+    transform: none !important;
+}
+
+/* 左边图片不要阴影 */
+#home-grid .photo-widget,
+#home-grid .photo-widget:hover {
+    box-shadow: none !important;
+    filter: none !important;
+    transform: none !important;
+}
+
+/* 纪念日也维持 v38 的无外阴影 */
+#home-grid .anniversary-widget,
+#home-grid .anniversary-widget:hover {
+    box-shadow: none !important;
+    filter: none !important;
+    transform: none !important;
+}
+
+/* 不让滑动 / viewport 刷新时 grid item 自己长大 */
+#home-grid .home-section.top-left,
+#home-grid .home-section.bottom-right {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    aspect-ratio: auto !important;
+}
+</style>
 
 </body>
 </html>
