@@ -62839,21 +62839,39 @@ This EVE integration is an independent adaptation for a different single-file ap
    v56：只处理用户点名的 7 项
    ========================================================= */
 
-/* 1. 左上图片 + 右下纪念日：强制 1:1 */
+/* 1. 左上图片 + 右下纪念日：由 home-grid 本身的正方形网格保证 1:1，
+   不再给 grid item 加 aspect-ratio，避免 iOS 滑动/viewport 刷新时把网格撑爆。 */
 #home-grid .home-section.top-left,
 #home-grid .home-section.bottom-right {
-    aspect-ratio: 1 / 1 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    aspect-ratio: auto !important;
 }
-
 #home-grid .home-section.top-left .photo-widget,
 #home-grid .home-section.bottom-right .anniversary-widget {
     width: 100% !important;
     height: 100% !important;
-    aspect-ratio: 1 / 1 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    aspect-ratio: auto !important;
     box-sizing: border-box !important;
 }
-
-/* 2. 右上四个入口再松散一点，不改结构 */
+#home-grid .photo-widget-content,
+#home-grid .anniversary-widget-content {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    box-sizing: border-box !important;
+}
+#home-grid .photo-widget-image {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: cover !important;
+    transform: none !important;
+}/* 2. 右上四个入口再松散一点，不改结构 */
 #home-grid .home-section.top-right {
     padding: 0 !important;
 }
@@ -63077,6 +63095,234 @@ This EVE integration is an independent adaptation for a different single-file ap
     }else{
         init();
     }
+})();
+</script>
+
+
+<script id="eve-v57-reset-custom-icons-once">
+(function () {
+    'use strict';
+
+    var RESET_MARKER = 'eve_v57_default_icons_reset_done';
+
+    function restoreDefaultIconsInDOM() {
+        var defaults = [
+            ['#home-grid .mini-app[onclick*="chat-screen"] .mini-app-icon', '<i class="fas fa-comment-dots"></i>'],
+            ['#home-grid .mini-app[onclick*="worldbook-screen"] .mini-app-icon', '<i class="fas fa-globe-americas"></i>'],
+            ['#home-grid .mini-app[onclick*="anniversary-screen"] .mini-app-icon', '<i class="fas fa-heart"></i>'],
+            ['#home-grid .mini-app[onclick*="forum-screen"] .mini-app-icon', '<i class="fas fa-comments"></i>'],
+            ['#home-grid .mini-app[data-eve-home-app="music"] .mini-app-icon', '<i class="fas fa-music"></i>'],
+            ['#home-grid .mini-app[data-eve-home-app="api"] .mini-app-icon', '<i class="fas fa-plug"></i>'],
+            ['#dock-bar .dock-app[onclick*="messages-screen"] .dock-app-icon', '<i class="fas fa-envelope"></i>'],
+            ['#dock-bar .dock-app[onclick*="settings-screen"] .dock-app-icon', '<i class="fas fa-cog"></i>'],
+            ['#dock-bar .dock-app[onclick*="memory-viewer-screen"] .dock-app-icon', '<i class="fas fa-brain"></i>'],
+            ['#dock-bar .dock-app[onclick*="css-beauty-screen"] .dock-app-icon', '<i class="fas fa-paint-brush"></i>']
+        ];
+
+        defaults.forEach(function (item) {
+            var el = document.querySelector(item[0]);
+            if (el) el.innerHTML = item[1];
+        });
+
+        /* 音乐默认图标继续和其他图标同色、透明底 */
+        var musicBox = document.querySelector('#home-grid .mini-app[data-eve-home-app="music"] .mini-app-icon');
+        if (musicBox) musicBox.style.background = 'transparent';
+    }
+
+    async function clearSavedIcons() {
+        try {
+            localStorage.removeItem('eve_home_music_custom_icon_v1');
+            localStorage.removeItem('eve_home_api_custom_icon_v1');
+            localStorage.removeItem('eve_css_preset_custom_icon_v1');
+        } catch (_) {}
+
+        try {
+            if (window.db && db.appIcons) {
+                if (db.isOpen && !db.isOpen()) {
+                    try { await db.open(); } catch (_) {}
+                }
+                await db.appIcons.clear();
+            }
+        } catch (err) {
+            console.warn('[EVE v57] 清除自定义图标记录失败', err);
+        }
+
+        restoreDefaultIconsInDOM();
+
+        /* 防止原来的图标恢复逻辑稍后又把旧图标画回来 */
+        setTimeout(restoreDefaultIconsInDOM, 80);
+        setTimeout(restoreDefaultIconsInDOM, 350);
+        setTimeout(restoreDefaultIconsInDOM, 1100);
+
+        try { localStorage.setItem(RESET_MARKER, '1'); } catch (_) {}
+    }
+
+    function init() {
+        var done = false;
+        try { done = localStorage.getItem(RESET_MARKER) === '1'; } catch (_) {}
+
+        if (!done) {
+            clearSavedIcons();
+        } else {
+            restoreDefaultIconsInDOM();
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init, { once: true });
+    } else {
+        init();
+    }
+})();
+</script>
+
+
+<style id="eve-v58-final-three-fixes">
+/* 1) 主屏：彻底锁住四宫格尺寸，避免 iOS 滑动后 grid item 撑大、错位 */
+#phone-screen.fullscreen-mode #home-grid,
+#home-grid {
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+    grid-template-rows:minmax(0,1fr) minmax(0,1fr)!important;
+}
+#home-grid > .home-section {
+    min-width:0!important;
+    min-height:0!important;
+    overflow:visible!important;
+}
+#home-grid .home-section.top-left,
+#home-grid .home-section.bottom-right {
+    aspect-ratio:auto!important;
+}
+#home-grid .home-section.top-left .photo-widget,
+#home-grid .home-section.bottom-right .anniversary-widget {
+    width:100%!important;
+    height:100%!important;
+    min-width:0!important;
+    min-height:0!important;
+    max-width:100%!important;
+    max-height:100%!important;
+    aspect-ratio:auto!important;
+    transform:none!important;
+}
+#home-grid .photo-widget:hover,
+#home-grid .anniversary-widget:hover {
+    transform:none!important;
+}
+#home-grid .photo-widget-image {
+    inset:0!important;
+    width:100%!important;
+    height:100%!important;
+    max-width:100%!important;
+    max-height:100%!important;
+    object-fit:cover!important;
+    transform:none!important;
+}
+
+/* 2) 播放器页面：让页面本身延伸到顶部安全区，状态栏区域直接吃当前播放背景 */
+body:has(#nm-now-screen.show),
+body:has(#nm-lyrics-screen.show) {
+    background:transparent!important;
+}
+html:has(#nm-now-screen.show),
+html:has(#nm-lyrics-screen.show) {
+    background-color:#242424!important;
+}
+
+/* 顶部用同一首歌封面背景铺到安全区，不留单独色带 */
+#nm-now-screen.show::before,
+#nm-lyrics-screen.show::before {
+    content:""!important;
+    position:fixed!important;
+    z-index:-1!important;
+    left:0!important;
+    right:0!important;
+    top:calc(-1 * env(safe-area-inset-top))!important;
+    height:calc(env(safe-area-inset-top) + 70px)!important;
+    background:inherit!important;
+    pointer-events:none!important;
+}
+
+/* 播放器顶栏不要再重复叠一份 safe-area 顶距 */
+#nm-now-screen .np-topbar {
+    padding-top:10px!important;
+}
+
+/* 3) 播放器底部整组（进度条 + 控制键）往上抬 */
+#nm-now-screen .np-progress-area {
+    transform:translateY(-24px)!important;
+}
+#nm-now-screen .np-controls {
+    transform:translateY(-24px)!important;
+    padding-bottom:calc(20px + env(safe-area-inset-bottom))!important;
+}
+
+/* 歌词页底部也保留之前的上抬，并再稳一点 */
+#nm-lyrics-screen .am-lyrics-bottom {
+    transform:translateY(-18px)!important;
+    margin-bottom:28px!important;
+}
+</style>
+
+<script id="eve-v58-player-statusbar-sync">
+(function(){
+    'use strict';
+    var root=document.documentElement;
+    var theme=document.getElementById('eve-dynamic-theme-color') || document.querySelector('meta[name="theme-color"]');
+    var apple=document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+
+    function shown(id){
+        var el=document.getElementById(id);
+        return !!(el && el.classList.contains('show'));
+    }
+    function styleBg(id){
+        var el=document.getElementById(id);
+        if(!el) return '';
+        return getComputedStyle(el).backgroundImage || '';
+    }
+    function setVars(color,img){
+        root.classList.add('eve-status-surface-active');
+        root.style.setProperty('--eve-status-surface-color',color);
+        root.style.setProperty('--eve-status-surface-image',img && img!=='none' ? img : 'none');
+        root.style.setProperty('--eve-status-surface-size','cover');
+        root.style.setProperty('--eve-status-surface-position','center top');
+        root.style.setProperty('--eve-status-surface-repeat','no-repeat');
+        root.style.backgroundColor=color;
+        root.style.backgroundImage=(img && img!=='none') ? img : 'none';
+        root.style.backgroundSize='cover';
+        root.style.backgroundPosition='center top';
+        if(theme) theme.setAttribute('content',color);
+        /* black-translucent 才允许内容/根背景透到 iOS 状态栏下面 */
+        if(apple) apple.setAttribute('content','black-translucent');
+    }
+    function sync(){
+        if(shown('nm-lyrics-screen')){
+            var li=styleBg('nm-lyrics-bg');
+            setVars('#242424', li);
+            return;
+        }
+        if(shown('nm-now-screen')){
+            var ni=styleBg('nm-now-bg');
+            setVars('#242424', ni);
+            return;
+        }
+    }
+    function schedule(){
+        requestAnimationFrame(sync);
+        setTimeout(sync,40);
+        setTimeout(sync,160);
+    }
+    ['nm-now-screen','nm-lyrics-screen','nm-now-bg','nm-lyrics-bg'].forEach(function(id){
+        var el=document.getElementById(id);
+        if(el && window.MutationObserver){
+            new MutationObserver(schedule).observe(el,{attributes:true,attributeFilter:['class','style']});
+        }
+    });
+    document.addEventListener('click',function(e){
+        if(e.target.closest('.np-vinyl-area,.am-lyrics-back,.np-topbar-btn')) schedule();
+    },true);
+    window.addEventListener('resize',schedule,{passive:true});
+    window.addEventListener('pageshow',schedule,{passive:true});
+    schedule();
 })();
 </script>
 
